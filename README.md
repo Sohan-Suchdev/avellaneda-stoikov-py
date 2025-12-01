@@ -21,44 +21,37 @@ The simulation creates a realistic closed-loop laboratory:
 Implements the closed-form approximation of the Hamilton-Jacobi-Bellman equation to dynamically adjust quotes:
 * **Reservation Price ($r$):** Skews the center price based on current inventory to encourage mean reversion.
 * **Optimal Spread ($\delta$):** Widens the spread during periods of high volatility ($\sigma$) or low market liquidity ($k$).
-* **Infinite Horizon Logic:** Applies a time Floor to maintain risk aversion constraints even as the trading session nears value $T$.
 
 ### 3. Execution & Commercial Logic
-* **Maker-Taker Fee Structure:** The PnL engine accounts for exchange economics:
-    * **Maker Rebate (+0.02%):** Earned when providing passive liquidity.
-    * **Taker Fee (-0.05%):** Paid when panic buying"to liquidate toxic inventory.
-* **Safety Clamps:** Implements logic to prevent negative spreads while allowing aggressive "Marketable Limit Orders" when inventory limits are breached.
+* **Maker-Taker Fee Structure:** The PnL engine incorporates realistic exchange economics to penalise aggressive inventory management:
+    * **Maker Rebate (+0.02%):** Revenue earned when providing passive liquidity (Limit Orders).
+    * **Taker Fee (-0.05%):** Cost incurred when crossing the spread (Marketable Limit Orders) to urgently liquidate toxic inventory.
+* **Safety Clamps:** Implements logic to prevent negative spreads while enabling the agent to execute "Marketable Limit Orders" when inventory limits are breached, prioritising risk reduction over spread capture.
 
 ## Quantitative Theory
 
 ### 1. Stochastic Optimal Control
-The core problem is maximizing Utility of Wealth ($U$) while penalizing inventory variance. The Avellaneda-Stoikov model shifts the "fair price" based on inventory ($q$) and risk aversion ($\gamma$):
+The core objective is to optimise the trade-off between maximising profit and minimising inventory variance. The Avellaneda-Stoikov model dynamically shifts the "reservation price" ($r$) based on current inventory ($q$) and risk aversion ($\gamma$):
 
 $$r(s, q, t) = s - q \gamma \sigma^2 (T - t)$$
 
-### 2. Inventory Risk & Toxic Flow
-A Naive market maker quoting a fixed spread around the Mid Price suffers from **Adverse Selection**. In a trending market, they accumulate a massive position against the trend (Toxic Inventory). This project demonstrates how identifying the "Reservation Price" neutralizes this risk.
+### 2. Balancing Risk & Inventory
+A Naive market maker utilises a fixed spread strategy that ignores its current position. This often leads to accumulating massive inventory positions that cannot be unwound profitably without incurring heavy losses. This project demonstrates how the AS model calculates a "Reservation Price" that continuously balances the marginal profit of a trade against the inventory risk, allowing the agent to manage its exposure dynamically.
 
 ### 3. Market Variance
-The optimal spread width is derived not just from competition, but from the volatility of the asset:
+The optimal spread width ($\delta$) is derived not just from market competition, but from the volatility of the asset and the time remaining in the trading session:
 
 $$\delta = \frac{\gamma \sigma^2 (T-t)}{2} + \frac{2}{\gamma} \ln(1 + \frac{\gamma}{k})$$
 
 ## Simulation Results
 
-The engine runs a comparative backtest between a **Naive Strategy** (Fixed Spread) and the **Avellaneda-Stoikov Strategy**.
+The simulation performs a comparative backtest between a **Naive Strategy** (Fixed Spread) and the **Avellaneda-Stoikov Strategy** (Stochastic Control).
 
-**1. The Inventory Trap (Naive)**
-The Naive agent acts as a "dumb" liquidity provider. As shown in the simulation, it accumulates large positions (e.g., Short -12) and fails to unwind them, leading to massive drawdowns when the price moves against it.
+### Visual Analysis of Strategy Performance
+<img width="100%" alt="Simulation Results Dashboard" src="https://github.com/user-attachments/assets/0e62374e-d3c0-495e-9c33-b258304d0ffd" />
 
-**2. The Mean Reversion (AS)**
-The AS agent successfully exhibits **Mean Reversion**. When inventory exceeds $\pm 5$ units, the strategy aggressively skews prices to pay the "Taker Fee" and neutralize exposure.
-
-**3. Performance Metrics**
-* **Naive Strategy:** Net PnL: **-$18.03** | **Sharpe Ratio: 0.55**
-* **AS Strategy:** Net PnL: **+$93.23** | **Sharpe Ratio: 1.05**
-
-<img width="1823" height="1012" alt="image" src="https://github.com/user-attachments/assets/0e62374e-d3c0-495e-9c33-b258304d0ffd" />
+### Summary of Observations
+The dashboard reveals distinct behaviors between the two agents. The **Naive agent (Red)** acts as a static provider, accumulating unmanaged directional positions which results in a negative PnL (-$18.03). In contrast, the **AS agent (Blue)** exhibits strong mean reversion; when inventory breaches tolerance levels, it aggressively skews prices to neutralise exposure. Despite paying Taker Fees to exit these positions, the AS strategy achieves a significantly higher **Sharpe Ratio (1.05)** and positive Net PnL (+$93.23).
 
 ## Technical Stack
 
@@ -71,7 +64,21 @@ The AS agent successfully exhibits **Mean Reversion**. When inventory exceeds $\
 
 Clone the repository:
 ```bash
-git clone [https://github.com/YourUsername/digital-market-maker.git](https://github.com/YourUsername/digital-market-maker.git)
+git clone https://github.com/Sohan-Suchdev/digital-market-maker.git
 
 cd digital-market-maker
+```
+
+Setup the environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Run the simulation:
+```bash
+python main.py
+```
+
 

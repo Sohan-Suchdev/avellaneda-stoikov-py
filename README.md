@@ -55,14 +55,8 @@ The Naive agent acts as a "dumb" liquidity provider. As shown in the simulation,
 The AS agent successfully exhibits **Mean Reversion**. When inventory exceeds $\pm 5$ units, the strategy aggressively skews prices to pay the "Taker Fee" and neutralize exposure.
 
 **3. Performance Metrics**
-* **Naive Strategy:** Net PnL: **-$200.50** (Wiped out by holding costs and fees).
-* **AS Strategy:** Net PnL: **+$220.15** | **Sharpe Ratio: 1.73**
-
-## The "Liquidation Puzzle" (Technical Challenge)
-
-During development, the AS agent initially failed to liquidate positions at the end of the trading day.
-* **Root Cause:** The term $(T-t)$ in the reservation price formula approaches $0$ as time runs out. Mathematically, the model assumed that with 1 second left, there was "zero risk" of price variance, so it stopped skewing prices.
-* **Resolution:** I implemented an **Infinite Horizon Assumption** (hardcoding $T-t=1.0$), forcing the bot to treat every second as if it still had significant future risk. This successfully induced the "Panic" behavior required to clear inventory.
+* **Naive Strategy:** Net PnL: **-$18.03** | **Sharpe Ratio: 0.55**
+* **AS Strategy:** Net PnL: **+$93.23** | **Sharpe Ratio: 1.05**
 
 <img width="1823" height="1012" alt="image" src="https://github.com/user-attachments/assets/0e62374e-d3c0-495e-9c33-b258304d0ffd" />
 
@@ -71,7 +65,7 @@ During development, the AS agent initially failed to liquidate positions at the 
 * **Python 3.10+**
 * **NumPy:** For vectorizing SDE generation (Geometric Brownian Motion).
 * **Matplotlib:** For visualizing the 3-panel dashboard (Price Path, Inventory Control, Wealth Accumulation).
-* **Pandas:** For calculating annualized Sharpe Ratios and return series.
+* **Pandas:** For calculating annualised Sharpe Ratios and return series.
 
 ## Installation & Usage
 
@@ -80,3 +74,4 @@ Clone the repository:
 git clone [https://github.com/YourUsername/digital-market-maker.git](https://github.com/YourUsername/digital-market-maker.git)
 
 cd digital-market-maker
+

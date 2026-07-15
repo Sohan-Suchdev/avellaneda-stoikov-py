@@ -18,7 +18,7 @@ class MarketMaker:
         self.inventory_limit = inventory_limit
         self.min_quote_spread = min_quote_spread
         self.max_quote_distance = max_quote_distance
-        # Positive means net fee cost; negative means net rebate earned.
+        # Positive is fee cost; negative is rebate earned.
         self.fees_paid = 0.0
         self.inventory_history = [self.inventory]
         self.wealth_history = [self.cash]

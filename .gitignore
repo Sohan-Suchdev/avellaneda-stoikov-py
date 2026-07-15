@@ -5,3 +5,5 @@ __pycache__/
 .vscode/
 results.db
 reports/*.png
+!reports/batch_distributions.png
+!reports/strategy_diagnostics.png

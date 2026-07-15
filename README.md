@@ -1,84 +1,161 @@
-# Digital Market Maker (Stochastic Optimal Control)
+# Digital Market Maker
 
-A Python-based high-frequency trading simulation that optimises bid-ask spreads using the Avellaneda-Stoikov model to manage inventory risk.
+A Python market-making simulation comparing Avellaneda-Stoikov stochastic control against fixed-spread and risk-aware baselines under GBM price dynamics and Poisson order flow.
 
-## Project Overview
+## Overview
 
-This project simulates a **Limit Order Book** environment to compare market-making strategies. Unlike directional trading bots that speculate on price movement, this engine acts as a liquidity provider. It quotes two-sided markets to capture the spread while solving the **Inventory Control Problem** via Stochastic Optimal Control.
+The project models a liquidity provider quoting bid and ask prices around a stochastic mid-price. It compares strategies on PnL, Sharpe ratio, Sortino ratio, drawdown, inventory exposure, and fee impact.
 
-The simulation models asset prices using **Geometric Brownian Motion** and order flow using **Poisson Processes**, creating a stochastic environment to test the robustness of the famous **Avellaneda-Stoikov** approximation.
+The final result is that calibrated Avellaneda-Stoikov quoting improves risk-adjusted performance versus a naive fixed-spread market maker. The improvement comes mainly from lower variance and drawdown, not from statistically significant higher raw PnL.
 
-## Key Features
+## Strategies
 
-### 1. Market Simulation
-The simulation creates a realistic closed-loop laboratory:
-* **Price Dynamics:** Generates mid-prices using a drift-less random walk ($dS_t = \sigma dW_t$).
-* **Order Flow:** Simulates the "Crowd" using Poisson arrival intensities.
-* **Fill Probability:** Implements an exponential decay function where the probability of a fill decreases as the spread widens:
-    $$P(fill) = A \cdot e^{-k \cdot \delta}$$
+- `naive`: fixed spread around the mid-price.
+- `avellaneda_stoikov`: reservation-price and optimal-spread quoting from the AS approximation.
+- `inventory_skewed`: fixed spread with inventory-dependent quote skew.
+- `volatility_scaled`: fixed spread widened by realised short-window volatility.
+- `enhanced_avellaneda_stoikov`: AS quoting using realised volatility as an input.
 
-### 2. The Agent (Avellaneda-Stoikov Strategy)
-Implements the closed-form approximation of the Hamilton-Jacobi-Bellman equation to dynamically adjust quotes:
-* **Reservation Price ($r$):** Skews the center price based on current inventory to encourage mean reversion.
-* **Optimal Spread ($\delta$):** Widens the spread during periods of high volatility ($\sigma$) or low market liquidity ($k$).
+The best tested strategy was standard Avellaneda-Stoikov with `gamma=5`.
 
-### 3. Execution & Commercial Logic
-* **Maker-Taker Fee Structure:** The PnL engine incorporates realistic exchange economics to penalise aggressive inventory management:
-    * **Maker Rebate (+0.02%):** Revenue earned when providing passive liquidity (Limit Orders).
-    * **Taker Fee (-0.05%):** Cost incurred when crossing the spread (Marketable Limit Orders) to urgently liquidate toxic inventory.
-* **Safety Clamps:** Implements logic to prevent negative spreads while enabling the agent to execute "Marketable Limit Orders" when inventory limits are breached, prioritising risk reduction over spread capture.
+## Model
 
-## Quantitative Theory
+Mid-price follows a geometric Brownian motion process. Order arrivals are modelled with exponential Poisson intensities:
 
-### 1. Stochastic Optimal Control
-The core objective is to optimise the trade-off between maximising profit and minimising inventory variance. The Avellaneda-Stoikov model dynamically shifts the "reservation price" ($r$) based on current inventory ($q$) and risk aversion ($\gamma$):
-
-$$r(s, q, t) = s - q \gamma \sigma^2 (T - t)$$
-
-### 2. Balancing Risk & Inventory
-A Naive market maker utilises a fixed spread strategy that ignores its current position. This often leads to accumulating massive inventory positions that cannot be unwound profitably without incurring heavy losses. This project demonstrates how the AS model calculates a "Reservation Price" that continuously balances the marginal profit of a trade against the inventory risk, allowing the agent to manage its exposure dynamically.
-
-### 3. Market Variance
-The optimal spread width ($\delta$) is derived not just from market competition, but from the volatility of the asset and the time remaining in the trading session:
-
-$$\delta = \frac{\gamma \sigma^2 (T-t)}{2} + \frac{2}{\gamma} \ln(1 + \frac{\gamma}{k})$$
-
-## Simulation Results
-
-The simulation performs a comparative backtest between a **Naive Strategy** (Fixed Spread) and the **Avellaneda-Stoikov Strategy** (Stochastic Control).
-
-### Visual Analysis of Strategy Performance
-<img width="100%" alt="Simulation Results Dashboard" src="https://github.com/user-attachments/assets/0e62374e-d3c0-495e-9c33-b258304d0ffd" />
-
-### Summary of Observations
-The dashboard reveals distinct behaviors between the two agents. The **Naive agent (Red)** acts as a static provider, accumulating unmanaged directional positions which results in a negative PnL (-$18.03). In contrast, the **AS agent (Blue)** exhibits strong mean reversion; when inventory breaches tolerance levels, it aggressively skews prices to neutralise exposure. Despite paying Taker Fees to exit these positions, the AS strategy achieves a significantly higher **Sharpe Ratio (1.05)** and positive Net PnL (+$93.23).
-
-## Technical Stack
-
-* **Python 3.10+**
-* **NumPy:** For vectorizing SDE generation (Geometric Brownian Motion).
-* **Matplotlib:** For visualizing the 3-panel dashboard (Price Path, Inventory Control, Wealth Accumulation).
-* **Pandas:** For calculating annualised Sharpe Ratios and return series.
-
-## Installation & Usage
-
-Clone the repository:
-```bash
-git clone https://github.com/Sohan-Suchdev/digital-market-maker.git
-
-cd digital-market-maker
+```text
+lambda(delta) = A * exp(-k * delta)
 ```
 
-Setup the environment:
+The Avellaneda-Stoikov reservation price is:
+
+```text
+r = s - q * gamma * sigma^2 * (T - t)
+```
+
+The total optimal spread approximation is:
+
+```text
+gamma * sigma^2 * (T - t) + (2 / gamma) * log(1 + gamma / k)
+```
+
+The simulator also includes maker rebates, taker fees, deterministic seeding, SQLite persistence, Monte Carlo batch runs, parameter sweeps, and saved report plots.
+
+## Final Results
+
+Monte Carlo batch testing used paired seeds across strategies. The final comparison used 1,000 paired runs and AS `gamma=5`.
+
+| Strategy | Mean PnL | PnL Std | Mean Sharpe | Mean Max Drawdown |
+| --- | ---: | ---: | ---: | ---: |
+| Avellaneda-Stoikov | 48.15 | 43.44 | 0.642 | 4.29 |
+| Enhanced AS | 48.24 | 45.91 | 0.573 | 5.52 |
+| Inventory-skewed | 51.56 | 93.65 | 0.213 | 18.48 |
+| Naive | 44.66 | 368.25 | 0.167 | 31.45 |
+| Volatility-scaled | 56.47 | 264.41 | 0.230 | 20.36 |
+
+Paired AS-vs-naive result:
+
+```text
+PnL AS - naive: mean diff = 3.49, p = 0.761
+Sharpe AS - naive: mean diff = 0.475, p < 0.001
+```
+
+Interpretation:
+
+- AS materially improves Sharpe versus naive.
+- The PnL improvement is not statistically significant.
+- AS dominates mainly through lower variance, lower drawdown, and better inventory control.
+- The tested model improvements did not beat standard AS on risk-adjusted performance.
+
+## Report Figures
+
+### Batch Distributions
+
+![Batch distributions](reports/batch_distributions.png)
+
+### Strategy Diagnostics
+
+![Strategy diagnostics](reports/strategy_diagnostics.png)
+
+## Usage
+
+Install dependencies:
+
 ```bash
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Run the simulation:
+Run a single simulation:
+
 ```bash
 python main.py
 ```
 
+Run a paired Monte Carlo batch:
 
+```bash
+python -m src.run_batch --n-runs 1000 --strategy both --gamma 5
+```
+
+Generate the report summary and plots:
+
+```bash
+python main.py --batch --plot
+```
+
+Run a gamma sweep:
+
+```bash
+python -m src.sweep --n-runs 1000 --gamma-values 2,3,4,5,6,7,8
+python main.py --sweep
+```
+
+Run additional baselines:
+
+```bash
+python -m src.run_batch --n-runs 1000 --strategy inventory_skewed --inventory-skew 0.05
+python -m src.run_batch --n-runs 1000 --strategy volatility_scaled --volatility-spread-multiplier 0.5
+python -m src.run_batch --n-runs 1000 --strategy enhanced_avellaneda_stoikov --gamma 5
+```
+
+## Docker
+
+Build and run the report container:
+
+```bash
+docker compose up app
+```
+
+Generate fresh batch data:
+
+```bash
+docker compose run batch
+```
+
+The SQLite database is stored as `results.db`, and report images are written to `reports/`.
+
+## Project Structure
+
+```text
+src/
+  analysis.py
+  analysis_report.py
+  config.py
+  environment.py
+  market_maker.py
+  run_batch.py
+  simulation.py
+  sweep.py
+  storage/
+    db.py
+    models.py
+    queries.py
+main.py
+Dockerfile
+docker-compose.yml
+```
+
+## Conclusion
+
+The calibrated Avellaneda-Stoikov strategy is the strongest final model in this project. It does not reliably increase average PnL versus naive quoting, but it produces a statistically significant improvement in Sharpe ratio and substantially reduces drawdown and PnL variance.

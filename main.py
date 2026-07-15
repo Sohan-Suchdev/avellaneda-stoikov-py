@@ -1,7 +1,11 @@
 import argparse
 
 from src.analysis import calculate_metrics, plot_comparison
-from src.analysis_report import plot_batch_distributions, print_batch_report
+from src.analysis_report import (
+    plot_batch_distributions,
+    plot_strategy_diagnostics,
+    print_batch_report,
+)
 from src.config import SimulationConfig
 from src.simulation import Strategy, run_simulation
 from src.storage.queries import gamma_paired_comparison, sweep_summary
@@ -28,6 +32,7 @@ def main():
         print_batch_report()
         if args.plot:
             plot_batch_distributions()
+            plot_strategy_diagnostics()
         return
 
     config = SimulationConfig()

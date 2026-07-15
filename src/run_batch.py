@@ -15,13 +15,27 @@ def _parse_args():
     parser.add_argument("--n-runs", type=int, default=1000)
     parser.add_argument(
         "--strategy",
-        choices=["naive", "avellaneda_stoikov", "both"],
+        choices=[
+            "naive",
+            "inventory_skewed",
+            "volatility_scaled",
+            "avellaneda_stoikov",
+            "enhanced_avellaneda_stoikov",
+            "both",
+        ],
         default="both",
     )
     parser.add_argument("--gamma", type=float)
     parser.add_argument("--sigma", type=float)
     parser.add_argument("--k", type=float)
     parser.add_argument("--A", type=float)
+    parser.add_argument("--inventory-limit", type=int)
+    parser.add_argument("--min-quote-spread", type=float)
+    parser.add_argument("--max-quote-distance", type=float)
+    parser.add_argument("--volatility-window", type=int)
+    parser.add_argument("--volatility-spread-multiplier", type=float)
+    parser.add_argument("--inventory-skew", type=float)
+    parser.add_argument("--adverse-selection-strength", type=float)
     return parser.parse_args()
 
 
@@ -32,6 +46,41 @@ def _build_config(args) -> SimulationConfig:
         sigma=args.sigma if args.sigma is not None else default_config.sigma,
         k=args.k if args.k is not None else default_config.k,
         A=args.A if args.A is not None else default_config.A,
+        inventory_limit=(
+            args.inventory_limit
+            if args.inventory_limit is not None
+            else default_config.inventory_limit
+        ),
+        min_quote_spread=(
+            args.min_quote_spread
+            if args.min_quote_spread is not None
+            else default_config.min_quote_spread
+        ),
+        max_quote_distance=(
+            args.max_quote_distance
+            if args.max_quote_distance is not None
+            else default_config.max_quote_distance
+        ),
+        volatility_window=(
+            args.volatility_window
+            if args.volatility_window is not None
+            else default_config.volatility_window
+        ),
+        volatility_spread_multiplier=(
+            args.volatility_spread_multiplier
+            if args.volatility_spread_multiplier is not None
+            else default_config.volatility_spread_multiplier
+        ),
+        inventory_skew=(
+            args.inventory_skew
+            if args.inventory_skew is not None
+            else default_config.inventory_skew
+        ),
+        adverse_selection_strength=(
+            args.adverse_selection_strength
+            if args.adverse_selection_strength is not None
+            else default_config.adverse_selection_strength
+        ),
     )
 
 
@@ -42,6 +91,13 @@ def _selected_strategies(strategy_arg: str) -> list[Strategy]:
     return [Strategy(strategy_arg)]
 
 
+def _uses_gamma(strategy: Strategy) -> bool:
+    return strategy in {
+        Strategy.AVELLANEDA_STOIKOV,
+        Strategy.ENHANCED_AVELLANEDA_STOIKOV,
+    }
+
+
 def _run_row(config: SimulationConfig, strategy: Strategy, seed: int) -> Run:
     rng = np.random.default_rng(seed)
     result = run_simulation(config, strategy, rng=rng)
@@ -50,10 +106,16 @@ def _run_row(config: SimulationConfig, strategy: Strategy, seed: int) -> Run:
     return Run(
         strategy=strategy.value,
         seed=seed,
-        gamma=config.gamma if strategy is Strategy.AVELLANEDA_STOIKOV else None,
+        gamma=config.gamma if _uses_gamma(strategy) else None,
         sigma=config.sigma,
         k=config.k,
         A=config.A,
+        inventory_limit=config.inventory_limit,
+        min_quote_spread=config.min_quote_spread,
+        max_quote_distance=config.max_quote_distance,
+        volatility_spread_multiplier=config.volatility_spread_multiplier,
+        inventory_skew=config.inventory_skew,
+        adverse_selection_strength=config.adverse_selection_strength,
         net_pnl=metrics.net_pnl,
         sharpe=metrics.sharpe,
         sortino=metrics.sortino,
@@ -70,26 +132,47 @@ def _existing_run_keys(
     n_runs: int,
 ):
     strategy_values = [strategy.value for strategy in strategies]
-    statement = select(Run.strategy, Run.seed, Run.gamma, Run.sigma, Run.k, Run.A).where(
+    statement = select(
+        Run.strategy,
+        Run.seed,
+        Run.gamma,
+        Run.sigma,
+        Run.k,
+        Run.A,
+        Run.inventory_limit,
+        Run.min_quote_spread,
+        Run.max_quote_distance,
+        Run.volatility_spread_multiplier,
+        Run.inventory_skew,
+        Run.adverse_selection_strength,
+    ).where(
         Run.strategy.in_(strategy_values),
         Run.seed.in_(range(n_runs)),
         Run.sigma == config.sigma,
         Run.k == config.k,
         Run.A == config.A,
+        Run.inventory_limit == config.inventory_limit,
+        Run.min_quote_spread == config.min_quote_spread,
+        Run.max_quote_distance == config.max_quote_distance,
+        Run.volatility_spread_multiplier == config.volatility_spread_multiplier,
+        Run.inventory_skew == config.inventory_skew,
+        Run.adverse_selection_strength == config.adverse_selection_strength,
     )
 
-    if Strategy.AVELLANEDA_STOIKOV in strategies and Strategy.NAIVE not in strategies:
-        statement = statement.where(Run.gamma == config.gamma)
-    elif Strategy.NAIVE in strategies and Strategy.AVELLANEDA_STOIKOV not in strategies:
-        statement = statement.where(Run.gamma.is_(None))
-    else:
+    gamma_strategies = [strategy.value for strategy in strategies if _uses_gamma(strategy)]
+    non_gamma_strategies = [
+        strategy.value for strategy in strategies if not _uses_gamma(strategy)
+    ]
+
+    if gamma_strategies and non_gamma_strategies:
         statement = statement.where(
-            (Run.strategy == Strategy.NAIVE.value)
-            | (
-                (Run.strategy == Strategy.AVELLANEDA_STOIKOV.value)
-                & (Run.gamma == config.gamma)
-            )
+            (Run.strategy.in_(non_gamma_strategies) & Run.gamma.is_(None))
+            | (Run.strategy.in_(gamma_strategies) & (Run.gamma == config.gamma))
         )
+    elif gamma_strategies:
+        statement = statement.where(Run.gamma == config.gamma)
+    else:
+        statement = statement.where(Run.gamma.is_(None))
 
     return session.execute(statement).all()
 
@@ -104,9 +187,27 @@ def run_batch(config: SimulationConfig, strategies: list[Strategy], n_runs: int)
             sample = ", ".join(
                 (
                     f"({strategy}, seed={seed}, gamma={gamma}, "
-                    f"sigma={sigma}, k={k}, A={arrival_intensity})"
+                    f"sigma={sigma}, k={k}, A={arrival_intensity}, "
+                    f"limit={inventory_limit}, min_spread={min_quote_spread}, "
+                    f"max_distance={max_quote_distance}, "
+                    f"vol_mult={volatility_spread_multiplier}, "
+                    f"skew={inventory_skew}, "
+                    f"adverse={adverse_selection_strength})"
                 )
-                for strategy, seed, gamma, sigma, k, arrival_intensity in existing_keys[:5]
+                for (
+                    strategy,
+                    seed,
+                    gamma,
+                    sigma,
+                    k,
+                    arrival_intensity,
+                    inventory_limit,
+                    min_quote_spread,
+                    max_quote_distance,
+                    volatility_spread_multiplier,
+                    inventory_skew,
+                    adverse_selection_strength,
+                ) in existing_keys[:5]
             )
             raise SystemExit(
                 "Existing batch rows found for requested strategy/seed/parameter "

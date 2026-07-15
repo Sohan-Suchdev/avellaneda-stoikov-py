@@ -19,6 +19,12 @@ class Run(Base):
             "sigma",
             "k",
             "A",
+            "inventory_limit",
+            "min_quote_spread",
+            "max_quote_distance",
+            "volatility_spread_multiplier",
+            "inventory_skew",
+            "adverse_selection_strength",
             name="uq_runs_strategy_seed_params",
         ),
     )
@@ -34,6 +40,18 @@ class Run(Base):
     sigma: Mapped[float | None] = mapped_column(Float, nullable=True)
     k: Mapped[float | None] = mapped_column(Float, nullable=True)
     A: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inventory_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    min_quote_spread: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_quote_distance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volatility_spread_multiplier: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    inventory_skew: Mapped[float | None] = mapped_column(Float, nullable=True)
+    adverse_selection_strength: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
     net_pnl: Mapped[float] = mapped_column(Float, nullable=False)
     sharpe: Mapped[float] = mapped_column(Float, nullable=False)
     sortino: Mapped[float] = mapped_column(Float, nullable=False)

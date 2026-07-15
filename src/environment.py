@@ -1,18 +1,11 @@
 import numpy as np
-from dataclasses import dataclass
+from src.config import SimulationConfig
 
-@dataclass
-class MarketConfig:
-    T: float = 1.0
-    dt: float = 0.005
-    sigma: float = 0.5
-    start_price: float = 100
-    k: float = 1.5  # Kappa
-    A: float = 140  # Arrival Intensity
 
 class MarketEnvironment:
-    def __init__(self, config: MarketConfig):
+    def __init__(self, config: SimulationConfig, rng: np.random.Generator | None = None):
         self.config = config
+        self.rng = rng if rng is not None else np.random.default_rng()
         self.current_time = 0.0
         self.mid_price = config.start_price
         self.price_history = []
@@ -20,7 +13,7 @@ class MarketEnvironment:
 
     def step_price(self):
         # Geometric Brownian Motion
-        dW = np.random.normal(0, np.sqrt(self.config.dt))
+        dW = self.rng.normal(0, np.sqrt(self.config.dt))
         self.mid_price += self.mid_price * self.config.sigma * dW
         self.current_time += self.config.dt
         self.price_history.append(self.mid_price)
@@ -40,8 +33,12 @@ class MarketEnvironment:
         p_buy = lambda_bid * self.config.dt
         p_sell = lambda_ask * self.config.dt
 
-        # Simulate trade proabbiltity
-        bid_filled = np.random.random() < p_buy
-        ask_filled = np.random.random() < p_sell
+        # These probabilities were previously uncapped; clamp before Bernoulli draws.
+        p_buy = np.clip(p_buy, 0.0, 1.0)
+        p_sell = np.clip(p_sell, 0.0, 1.0)
+
+        # Simulate trade probability
+        bid_filled = self.rng.random() < p_buy
+        ask_filled = self.rng.random() < p_sell
 
         return bid_filled, ask_filled

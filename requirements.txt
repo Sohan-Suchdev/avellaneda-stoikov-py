@@ -1,3 +1,7 @@
 numpy 
 matplotlib 
 pandas
+SQLAlchemy
+scipy
+pytest
+ruff

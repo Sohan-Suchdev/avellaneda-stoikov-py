@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    environment:
+      DMM_DB_PATH: /data/results.db
+      MPLBACKEND: Agg
+    volumes:
+      - ./reports:/app/reports
+      - ./:/data
+
+  batch:
+    build: .
+    entrypoint: ["python", "-m", "src.run_batch"]
+    command: ["--n-runs", "1000", "--strategy", "both"]
+    environment:
+      DMM_DB_PATH: /data/results.db
+      MPLBACKEND: Agg
+    volumes:
+      - ./reports:/app/reports
+      - ./:/data

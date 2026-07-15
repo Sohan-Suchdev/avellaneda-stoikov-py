@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/
+.github/
+.agents/
+.codex/
+.vscode/
+.DS_Store
+results.db
+reports/
